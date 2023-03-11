@@ -46,7 +46,7 @@ async function add(sourceSheet, sourceTable, variable, v) {
     await Office.onReady();
     await Excel.run(async (context) => {
         for (let j = 0; j < v.length; j++) {
-            console.log(v[j] + " " + sourceSheet + " " + sourceTable + " " + variable);
+            //console.log(v[j] + " " + sourceSheet + " " + sourceTable + " " + variable);
             const sheet = context.workbook.worksheets.getItem(sourceSheet);
             const table = sheet.tables.getItem(sourceTable);
             let filter = table.columns.getItem(variable).filter;
@@ -77,6 +77,8 @@ async function add(sourceSheet, sourceTable, variable, v) {
         }
     });
 }
+
+
 
 async function createBoxplotFormulas(sheetName, tableName, colName) {
     await Office.onReady();
@@ -266,29 +268,47 @@ async function deleteLastWorksheet() {
     });
 }
 
-async function listWorksheets(dotNetReference) {
+let dotNetReference;
+async function registerOnActivateHandler(callbackRef) {
+    dotNetReference = callbackRef;
     await Office.onReady();
     await Excel.run(async (context) => {
-        const sheets = context.workbook.worksheets;
-        sheets.load("items/name");
-        await context.sync();
-        let allSheets = [];
-        for (let i in sheets.items) {
-            const tables = sheets.items[i].tables;
-            tables.load('name, count, headers, columns');
-            await context.sync();
-            let allTables = [];
-            for (let j in tables.items) {
-                let tableheaders = tables.items[j].columns.items;
-                let alltableheaders = [];
-                for (let k in tableheaders) {
-                    alltableheaders.push(tableheaders[k].name);
-                }
-                allTables.push({tablename: tables.items[j].name, categories: alltableheaders});
+        let sheets = context.workbook.worksheets;
+        sheets.onActivated.add(onActivate);
 
+        await context.sync();
+        console.log("A handler has been registered for the OnActivate event.");
+    });
+}
+
+async function onActivate(args) {
+    await Excel.run(async (context) => {
+        console.log("The activated worksheet Id : " + args.worksheetId);
+        await listWorksheets();
+    });
+}
+
+async function listWorksheets() {
+    await Office.onReady();
+    await Excel.run(async (context) => {
+        let sheet = context.workbook.worksheets.getActiveWorksheet();
+        //const sheets = context.workbook.worksheets;
+        sheet.load("items/name");
+        await context.sync();
+        //let allSheets = [];
+        const tables = sheet.tables;
+        tables.load('name, count, headers, columns');
+        await context.sync();
+        let allTables = [];
+        for (let j in tables.items) {
+            let tableheaders = tables.items[j].columns.items;
+            let alltableheaders = [];
+            for (let k in tableheaders) {
+                alltableheaders.push(tableheaders[k].name);
             }
-            allSheets.push({sheetname: sheets.items[i].name, tables: allTables});
+            allTables.push({tablename: tables.items[j].name, categories: alltableheaders});
         }
-        dotNetReference.invokeMethodAsync("CallbackAllWorksheets", allSheets);
+        console.log(sheet.name);
+        await dotNetReference.invokeMethodAsync("CallbackAllTablesInActiveWorksheet", allTables, sheet.name);
     });
 }

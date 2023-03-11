@@ -52,11 +52,11 @@
     private string? SelectedTable { get; set; } = "";
     private string? SelectedVariable { get; set; } = "";
     private string? SelectedBoxplotValues { get; set; } = "";
-    private string SelectedSheet => GetSheet();
+    private string ActiveSheet = ""; 
 
     readonly List<string> categories = new();
     readonly List<string> tables = new();
-    private List<WorksheetModel> Worksheets { get; set; } = new();
+    private List<TableModel> Tables { get; set; } = new();
     private JsonSerializerOptions _options;
     private DotNetObjectReference<Index> _lDotNetReference;
     
@@ -70,15 +70,16 @@
                 PropertyNameCaseInsensitive = true
             };
             _lDotNetReference = DotNetObjectReference.Create(this);
-            await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+            await _jsRuntimeService.InvokeVoidAsync("registerOnActivateHandler", _lDotNetReference);
+            await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
             StateHasChanged();
         }
     }
     
     private async Task Write()
     {
-        var sheet = GetSheet();
-        var json = await _jsRuntimeService.InvokeAsync<JsonElement>("getValuesFromColumn", sheet, SelectedTable, SelectedVariable);
+        //var sheet = GetSheet();
+        var json = await _jsRuntimeService.InvokeAsync<JsonElement>("getValuesFromColumn", ActiveSheet, SelectedTable, SelectedVariable);
 
         var tbl = json.Deserialize<object[][]>(_options);
         
@@ -88,93 +89,67 @@
             if (distinctValues.Contains(e[0].ToString()) == false)
                 distinctValues.Add(e[0].ToString());
         });
-        await _jsRuntimeService.InvokeVoidAsync("add", sheet, SelectedTable, SelectedVariable, distinctValues);
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+        await _jsRuntimeService.InvokeVoidAsync("add", ActiveSheet, SelectedTable, SelectedVariable, distinctValues);
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
     }
     
     private async Task Delete()
     {
         await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
     }
     
     private async Task Calc()
     {
-        await _jsRuntimeService.InvokeVoidAsync("createBoxplotFormulas", SelectedSheet, SelectedTable, SelectedBoxplotValues);
+        await _jsRuntimeService.InvokeVoidAsync("createBoxplotFormulas", ActiveSheet, SelectedTable, SelectedBoxplotValues);
     }
     
     private async Task Reset()
     {
-        for (int i = 0; i < Worksheets.Count - 1; i++)
+        /*for (int i = 0; i < Worksheets.Count - 1; i++)
         {
             await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
-        }
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+        }*/
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
     }
 
     [JSInvokable]
-    public void CallbackAllWorksheets(JsonElement worksheetsArray)
+    public async Task CallbackAllTablesInActiveWorksheet(JsonElement tablesArray, string activeSheetName)
     {
-        var tables = worksheetsArray.Deserialize<WorksheetModel[]>(_options);
-        Worksheets.Clear();
-        Worksheets.AddRange(tables);
-        UpdateTablesCollection();
+        var tablescb = tablesArray.Deserialize<TableModel[]>(_options);
+        ActiveSheet = activeSheetName;
+        Tables.Clear();
+        tables.Clear();
+        Tables.AddRange(tablescb);
+        foreach (var tbl in Tables)
+        {
+            tables.Add(tbl.TableName);
+            Console.WriteLine(tbl.TableName);
+            Console.WriteLine(tbl.Categories.Length);
+        }
+        SelectedTable = Tables.Count > 0 ? Tables[0].TableName : "";
+        //UpdateTablesCollection();
         UpdateCategoriesCollection(SelectedTable);
+        await InvokeAsync(StateHasChanged);
+
     }
 
     void UpdateCategoriesCollection(string selectedTable)
     {
         categories.Clear();
-        foreach (var worksheet in Worksheets)
+        foreach (var table in Tables)
         {
-            foreach (var table in worksheet.Tables)
-            {
-                if (table.TableName != selectedTable) continue;
-                for (int i = 0; i < table.Categories.Length; i++)
-                {
-                    bool state = i == 0;
-                    if (state)
-                    {
-                        SelectedVariable = table.Categories[i];
-                    }
-                    
-                    categories.Add(table.Categories[i]);
-                }
-            }
-        }
-    }
-    
-    void UpdateTablesCollection()
-    {
-        tables.Clear();
-        foreach (var worksheet in Worksheets)
-        {
-            for (int i = 0; i < worksheet.Tables.Length; i++)
+            if (table.TableName != selectedTable) continue;
+            for (int i = 0; i < table.Categories.Length; i++)
             {
                 bool state = i == 0;
                 if (state)
                 {
-                    SelectedTable = worksheet.Tables[i].TableName;
+                    SelectedVariable = table.Categories[i];
                 }
-                
-                tables.Add(worksheet.Tables[i].TableName);
+                    
+                categories.Add(table.Categories[i]);
             }
         }
-    }
-    
-    string GetSheet()
-    {
-        foreach (var tab in tables)
-        {
-            foreach (var sheet in Worksheets)
-            {
-                foreach (var t in sheet.Tables)
-                {
-                    if (t.TableName == tab)
-                        return sheet.SheetName;
-                }
-            }
-        }
-        return "no sheet found";
     }
 }
