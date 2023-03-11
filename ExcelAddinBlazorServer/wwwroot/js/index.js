@@ -53,9 +53,7 @@ async function add(sourceSheet, sourceTable, variable, v) {
             filter.apply({
                 filterOn: Excel.FilterOn.values,
                 values: [v[j]]
-            });
-            //await clearFilters(sourceSheet, sourceTable);
-            //await filterTable(sourceSheet, sourceTable, variable, j);
+            });            
             const visibleRange = table
                 .getRange()
                 .getVisibleView()
@@ -72,30 +70,93 @@ async function add(sourceSheet, sourceTable, variable, v) {
             range.values = values;
             sheetDest.getUsedRange().format.autofitColumns();
             sheetDest.getUsedRange().format.autofitRows();
-
             let newTable = sheetDest.tables.add(range, true);
             newTable.name = worksheetDest;
-
-            //await copyVisibleRange(sheet, table, sourceSheet + variable + j, context);
             table.clearFilters();
             await context.sync();
         }
     });
 }
 
-async function setFormula() {
+async function createBoxplotFormulas(sheetName, tableName, colName) {
+    await Office.onReady();
     await Excel.run(async (context) => {
-        let sheet = context.workbook.worksheets.getItem('Tabelle1');
-        let table = sheet.tables.getItem('Tabelle1');
-        const columnRange = table.columns.getItem('d').getDataBodyRange().load("values");
+        console.log(sheetName + " " + tableName + " " + colName);
+
+        let sheet = context.workbook.worksheets.getItem(sheetName);
+        let table = sheet.tables.getItem(tableName);
+        const columnRange = table.columns
+            .getItem(colName)
+            .getDataBodyRange()
+            .load("values");
         columnRange.load("address");
         await context.sync();
-        console.log(columnRange.address);
-        //const sheet = context.workbook.worksheets.getItem("Sample");
-        let formula = "=STDEV.S(" + columnRange.address + ")"
-        const range = sheet.getRange("F3");
-        range.formulas = [[formula]];
-        range.format.autofitColumns();
+        let valueRange = columnRange.address;
+        
+        let minFormula = "=MIN(" + valueRange + ")";
+        let lowerQuartile = "=QUARTILE(" + valueRange + "," +"1)";
+        let medianFormula = "=MEDIAN(" + valueRange + ")";
+        let upperQuartile = "=QUARTILE(" + valueRange + "," + "3)";
+        let maxFormula = "=MAX(" + valueRange + ")";
+        let rangeFormula = maxFormula + "-MIN(" + valueRange + ")";
+        let interquartileFormula = upperQuartile + "-QUARTILE(" + valueRange + "," + "1)";
+        let stdDevFormula = "=STDEV.S(" + valueRange + ")";
+
+        let range = context.workbook.getActiveCell();
+        range.load("address");
+        await context.sync();
+        let addrFirst = range.address;
+        for (let i = 0; i < 7; i++) {
+            range.insert(Excel.InsertShiftDirection.right);            
+        }        
+        range.insert(Excel.InsertShiftDirection.down);
+        range.load("address");
+        await context.sync();
+        let addrLast = range.address;
+
+        let finalRange = sheet.getRange(addrFirst + ':' + addrLast);
+        console.log(addrFirst + ':' + addrLast);
+        console.log(finalRange);
+        finalRange.load("address");
+        await context.sync();
+        console.log(finalRange.address);
+
+        finalRange.formulas = [
+            ['Min', 'Q25', 'Median', 'Q75', 'Max', 'Spannweite', 'IQR', 'St.Dev.'],
+            [minFormula, lowerQuartile, medianFormula, upperQuartile, maxFormula, rangeFormula, interquartileFormula, stdDevFormula]
+        ];
+        finalRange.format.autofitColumns();
+
+        await context.sync();
+    });
+}
+
+async function setFormula() {
+    await Excel.run(async (context) => {
+        let sheet = context.workbook.worksheets.getItem("Tabelle1");
+        let table = sheet.tables.getItem("Tabelle1");
+        const columnRange = table.columns
+            .getItem("d")
+            .getDataBodyRange()
+            .load("values");
+        columnRange.load("address");
+        await context.sync();
+        let formula = "=STDEV.S(" + columnRange.address + ")";
+        let range = sheet.getRange("F3");
+        range.load("address");
+        await context.sync();
+        let addrFirst = range.address;
+        range.insert(Excel.InsertShiftDirection.right);
+        range.load("address");
+        await context.sync();
+        let addrLast = range.address;
+
+        let finalRange = sheet.getRange(addrFirst + ":" + addrLast);
+        finalRange.load("address");
+        await context.sync();
+        console.log(finalRange.address);
+        finalRange.formulas = [[formula, formula]];
+        finalRange.format.autofitColumns();
 
         await context.sync();
     });

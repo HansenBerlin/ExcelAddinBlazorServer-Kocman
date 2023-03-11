@@ -3,47 +3,59 @@
 @using System.Text.Json
 @inject IJSRuntime _jsRuntimeService;
 
-<div>@SelectedTable</div>
-<div>@SelectedVariable</div>
-
-
 <div style="display: flex; flex-direction: column; margin-top: 12px;width: 280px">
-    <label for="people-listbox">Chose table</label>
+    <label for="tables">Auswahl der Tabelle</label>
     <FluentSelect TOption="string"
                   Items="@tables"
-                  Id="people-listbox"
+                  Id="tables"
                   OptionValue="@(p => p.ToString())"
                   OptionText="@(p => p.ToString())"
-                  @bind-Value="@SelectedTable" />
+                  @bind-Value="@SelectedTable"
+                  SelectedOptionChanged="async (s) => await Callback(s)"/>
 </div>
 
 <div style="display: flex; flex-direction: column; margin-top: 12px; width: 280px">
-    
-    <label for="people-listbox">Chose category</label>
-        <FluentSelect TOption="string"
-                      Items="@categories"
-                      Id="people"
-                      OptionValue="@(p => p.ToString())"
-                      OptionText="@(p => p.ToString())"
-                      @bind-Value="@SelectedVariable" />
+    <label for="categories">Aufteilung nach kategorialer Variable in Tabelle @SelectedTable</label>
+    <FluentSelect TOption="string"
+                  Items="@categories"
+                  Id="categories"
+                  OptionValue="@(p => p.ToString())"
+                  OptionText="@(p => p.ToString())"
+                  @bind-Value="@SelectedVariable" />
 </div>
 
+<div style="display: flex; flex-direction: column; margin-top: 12px; width: 280px">
+    <label for="boxplotValues">Für welche Werte (Spalte) sollen die Boxplotkennzahlen erzeugt werden?</label>
+        <FluentSelect TOption="string"
+                      Items="@categories"
+                      Id="boxplotValues"
+                      OptionValue="@(p => p.ToString())"
+                      OptionText="@(p => p.ToString())"
+                      @bind-Value="@SelectedBoxplotValues" />
+</div>
+
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="@(async () => await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference))">UPDATE</FluentButton>
 <FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Write()">CREATE</FluentButton>
 <FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Delete()">DELETE</FluentButton>
 <FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Reset()">RESET</FluentButton>
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Calc()">STD</FluentButton>
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Calc()">SET FORMULAS</FluentButton>
 
 @code{
+
+    private async Task Callback(string changed)
+    {
+        Console.WriteLine(changed);
+        UpdateCategoriesCollection(changed);
+        
+    }
     
     private string? SelectedTable { get; set; } = "";
     private string? SelectedVariable { get; set; } = "";
+    private string? SelectedBoxplotValues { get; set; } = "";
     private string SelectedSheet => GetSheet();
 
     readonly List<string> categories = new();
     readonly List<string> tables = new();
-    
-    //readonly List<Option<string>> _categories = new();
-    //readonly List<Option<string>> _tables = new();
     private List<WorksheetModel> Worksheets { get; set; } = new();
     private JsonSerializerOptions _options;
     private DotNetObjectReference<Index> _lDotNetReference;
@@ -88,7 +100,7 @@
     
     private async Task Calc()
     {
-        await _jsRuntimeService.InvokeVoidAsync("stDev", SelectedSheet, SelectedTable, SelectedVariable);
+        await _jsRuntimeService.InvokeVoidAsync("createBoxplotFormulas", SelectedSheet, SelectedTable, SelectedBoxplotValues);
     }
     
     private async Task Reset()
@@ -107,17 +119,17 @@
         Worksheets.Clear();
         Worksheets.AddRange(tables);
         UpdateTablesCollection();
-        UpdateCategoriesCollection();
+        UpdateCategoriesCollection(SelectedTable);
     }
 
-    void UpdateCategoriesCollection()
+    void UpdateCategoriesCollection(string selectedTable)
     {
         categories.Clear();
         foreach (var worksheet in Worksheets)
         {
             foreach (var table in worksheet.Tables)
             {
-                if (table.TableName != SelectedTable) continue;
+                if (table.TableName != selectedTable) continue;
                 for (int i = 0; i < table.Categories.Length; i++)
                 {
                     bool state = i == 0;
