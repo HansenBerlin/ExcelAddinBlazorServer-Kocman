@@ -3,49 +3,54 @@
 @using System.Text.Json
 @inject IJSRuntime _jsRuntimeService;
 
-<div style="display: flex; flex-direction: column; margin-top: 12px;width: 280px">
-    <label for="tables">Auswahl der Tabelle</label>
-    <FluentSelect TOption="string"
-                  Items="@tables"
-                  Id="tables"
-                  OptionValue="@(p => p.ToString())"
-                  OptionText="@(p => p.ToString())"
-                  @bind-Value="@SelectedTable"
-                  SelectedOptionChanged="async (s) => await Callback(s)"/>
-</div>
+<div style="display: flex; align-items: center; flex-direction: column; margin-top: 20px;">
+    <h2 style="margin-bottom: 16px;">Table Splitbot</h2>
 
-<div style="display: flex; flex-direction: column; margin-top: 12px; width: 280px">
-    <label for="categories">Aufteilung nach kategorialer Variable in Tabelle @SelectedTable</label>
-    <FluentSelect TOption="string"
-                  Items="@categories"
-                  Id="categories"
-                  OptionValue="@(p => p.ToString())"
-                  OptionText="@(p => p.ToString())"
-                  @bind-Value="@SelectedVariable" />
-</div>
+    @if (Tables.Count > 1)
+    {
+        <div style="margin-top: 12px; display: flex; align-items: center; flex-direction: column;">
+            <label style="width: 250px;" for="tables">Auswahl der Tabelle in diesm Arbeitsblatt</label>
+            <FluentSelect TOption="TableModel"
+                          Items="@Tables"
+                          Id="tables"
+                          OptionValue="@(p => p.TableName)"
+                          OptionText="@(p => p.TableName)"
+                          @bind-Value="@SelectedTable"
+                          SelectedOptionChanged="async (s) => await Callback(s)"/>
+        </div>
+    }
 
-<div style="display: flex; flex-direction: column; margin-top: 12px; width: 280px">
-    <label for="boxplotValues">Für welche Werte (Spalte) sollen die Boxplotkennzahlen erzeugt werden?</label>
+    <div style="margin-top: 12px; display: flex; align-items: center; flex-direction: column;">
+        <label style="width: 250px;" for="categories">Aufteilung nach kategorialer Variable in Tabelle: @SelectedTable</label>
+        <FluentSelect TOption="string"
+                      Items="@categories"
+                      Id="categories"
+                      OptionValue="@(p => p.ToString())"
+                      OptionText="@(p => p.ToString())"
+                      @bind-Value="@SelectedVariable"/>
+    </div>
+
+    <div style="margin-top: 12px; margin-bottom: 40px; display: flex; align-items: center; flex-direction: column;">
+        <label style="width: 250px;" for="boxplotValues">Für welche Werte (Spalte) sollen die Boxplotkennzahlen erzeugt werden?</label>
         <FluentSelect TOption="string"
                       Items="@categories"
                       Id="boxplotValues"
                       OptionValue="@(p => p.ToString())"
                       OptionText="@(p => p.ToString())"
-                      @bind-Value="@SelectedBoxplotValues" />
-</div>
+                      @bind-Value="@SelectedBoxplotValues"/>
+    </div>
 
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="@(async () => await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference))">UPDATE</FluentButton>
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Write()">CREATE</FluentButton>
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Delete()">DELETE</FluentButton>
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Reset()">RESET</FluentButton>
-<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Calc()">SET FORMULAS</FluentButton>
+    <FluentButton Appearance="Appearance.Accent" style="width: 250px; margin-bottom: 12px;" @onclick="async () => await CreateWorksheetsAsync()">Schalter 1 (Aufteilung)</FluentButton>
+    <FluentButton Appearance="Appearance.Accent" style="width: 250px; margin-bottom: 12px;" @onclick="async () => await Calc()">Schalter 2 (Kennzahlen)</FluentButton>
+    <FluentButton Appearance="Appearance.Accent" style="width: 250px; margin-bottom: 12px;" @onclick="async () => await Reset()">Schalter 3 (Urzustand)</FluentButton>
+    <!--<FluentButton Appearance="Appearance.Filled" style="width: 250px;" @onclick="async () => await Delete()">DELETE</FluentButton>-->
+</div>
 
 @code{
 
-    private async Task Callback(string changed)
+    private async Task Callback(TableModel changed)
     {
-        Console.WriteLine(changed);
-        UpdateCategoriesCollection(changed);
+        UpdateCategoriesCollection(changed.TableName);
         
     }
     
@@ -55,7 +60,7 @@
     private string ActiveSheet = ""; 
 
     readonly List<string> categories = new();
-    readonly List<string> tables = new();
+    //readonly List<string> tables = new();
     private List<TableModel> Tables { get; set; } = new();
     private JsonSerializerOptions _options;
     private DotNetObjectReference<Index> _lDotNetReference;
@@ -71,32 +76,37 @@
             };
             _lDotNetReference = DotNetObjectReference.Create(this);
             await _jsRuntimeService.InvokeVoidAsync("registerOnActivateHandler", _lDotNetReference);
-            await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
+            await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
             StateHasChanged();
         }
     }
     
-    private async Task Write()
+    private async Task CreateWorksheetsAsync()
     {
-        //var sheet = GetSheet();
-        var json = await _jsRuntimeService.InvokeAsync<JsonElement>("getValuesFromColumn", ActiveSheet, SelectedTable, SelectedVariable);
+        var json = await _jsRuntimeService.InvokeAsync<JsonElement>(
+            "getValuesFromColumn", ActiveSheet, SelectedTable, SelectedVariable);
 
         var tbl = json.Deserialize<object[][]>(_options);
-        
         List<string> distinctValues = new();
         (tbl ?? Array.Empty<object[]>()).ToList().ForEach(e =>
         {
             if (distinctValues.Contains(e[0].ToString()) == false)
+            {
                 distinctValues.Add(e[0].ToString());
+            }
         });
-        await _jsRuntimeService.InvokeVoidAsync("add", ActiveSheet, SelectedTable, SelectedVariable, distinctValues);
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
+        List<Task> tasks = distinctValues
+            .Select(val => Task.Run(async () => await _jsRuntimeService
+                .InvokeVoidAsync("createWorksheets", ActiveSheet, SelectedTable, SelectedVariable, val)))
+            .ToList();
+        await Task.WhenAll(tasks);
+        await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
     }
     
     private async Task Delete()
     {
-        await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
+        await _jsRuntimeService.InvokeVoidAsync("deleteWorksheets", false);
+        await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
     }
     
     private async Task Calc()
@@ -106,11 +116,8 @@
     
     private async Task Reset()
     {
-        /*for (int i = 0; i < Worksheets.Count - 1; i++)
-        {
-            await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
-        }*/
-        await _jsRuntimeService.InvokeVoidAsync("listWorksheets");
+        await _jsRuntimeService.InvokeVoidAsync("deleteWorksheets", true);
+        await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
     }
 
     [JSInvokable]
@@ -119,11 +126,11 @@
         var tablescb = tablesArray.Deserialize<TableModel[]>(_options);
         ActiveSheet = activeSheetName;
         Tables.Clear();
-        tables.Clear();
+        //tables.Clear();
         Tables.AddRange(tablescb);
         foreach (var tbl in Tables)
         {
-            tables.Add(tbl.TableName);
+            //tables.Add(tbl.TableName);
             Console.WriteLine(tbl.TableName);
             Console.WriteLine(tbl.Categories.Length);
         }

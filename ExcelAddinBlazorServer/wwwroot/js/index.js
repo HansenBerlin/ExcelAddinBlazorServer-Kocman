@@ -1,90 +1,62 @@
-﻿async function createSheetsByVariable(sourceSheet, sourceTable, variable, v) {
-    await Office.onReady();
-    return new Office.Promise(async function (resolve) {
-        await Excel.run(async (context) => {
-            for (let j = 0; j < v.length; j++) {
-                let sheet = context.workbook.worksheets.getItem(sourceSheet);
-                sheet.load("items/name");
-                await context.sync();
-
-                let table = sheet.tables.getItem(sourceTable);
-                table.clearFilters();
-                await context.sync();
-
-                let filter = table.columns.getItem(variable).filter;
-                filter.apply({
-                    filterOn: Excel.FilterOn.values,
-                    values: [v[j]]
-                });
-                await context.sync();
-
-                let visibleRange = table.getRange().getVisibleView().load("values");
-                await sheet.sync();
-
-                let values = visibleRange.values;
-                let rowCount = values.length;
-                let columnCount = values[0].length;
-                let worksheetDest = sourceSheet + variable + j;
-                context.workbook.worksheets.getItemOrNullObject(worksheetDest).delete();
-                let sheetDest = context.workbook.worksheets.add(worksheetDest);
-                let range = sheetDest.getRangeByIndexes(0, 0, rowCount, columnCount);
-                range.values = values;
-                sheetDest.getUsedRange().format.autofitColumns();
-                sheetDest.getUsedRange().format.autofitRows();
-
-                let newTable = sheetDest.tables.add(range, true);
-                newTable.name = worksheetDest;
-                await context.sync();
-            }
-        });
-        resolve("ok");
-    });
-}
+﻿let sheetsCreated = []
+let dotNetReference;
 
 
-async function add(sourceSheet, sourceTable, variable, v) {
+async function createWorksheets(sourceSheet, sourceTable, variable, value) {
     await Office.onReady();
     await Excel.run(async (context) => {
-        for (let j = 0; j < v.length; j++) {
-            //console.log(v[j] + " " + sourceSheet + " " + sourceTable + " " + variable);
-            const sheet = context.workbook.worksheets.getItem(sourceSheet);
-            const table = sheet.tables.getItem(sourceTable);
-            let filter = table.columns.getItem(variable).filter;
-            filter.apply({
-                filterOn: Excel.FilterOn.values,
-                values: [v[j]]
-            });            
-            const visibleRange = table
-                .getRange()
-                .getVisibleView()
-                .load("values");
-            await context.sync();
+        const sheet = context.workbook.worksheets.getItem(sourceSheet);
+        const table = sheet.tables.getItem(sourceTable);
+        let filter = table.columns.getItem(variable).filter;
+        console.log(value);
+        filter.apply({
+            filterOn: Excel.FilterOn.values,
+            values: [value]
+        });
+        const visibleRange = table
+            .getRange()
+            .getVisibleView()
+            .load("values");
+        await context.sync();
+        await context.application.suspendScreenUpdatingUntilNextSync();
 
-            let values = visibleRange.values;
-            let rowCount = values.length;
-            let columnCount = values[0].length;
-            let worksheetDest = sourceSheet + variable + j;
-            context.workbook.worksheets.getItemOrNullObject(worksheetDest).delete();
-            let sheetDest = context.workbook.worksheets.add(worksheetDest);
-            let range = sheetDest.getRangeByIndexes(0, 0, rowCount, columnCount);
-            range.values = values;
-            sheetDest.getUsedRange().format.autofitColumns();
-            sheetDest.getUsedRange().format.autofitRows();
-            let newTable = sheetDest.tables.add(range, true);
-            newTable.name = worksheetDest;
-            table.clearFilters();
-            await context.sync();
-        }
+        let values = visibleRange.values;
+        let rowCount = values.length;
+        let columnCount = values[0].length;
+        let worksheetDest = sourceSheet + variable + value;
+        context.workbook.worksheets.getItemOrNullObject(worksheetDest).delete();
+        let sheetDest = context.workbook.worksheets.add(worksheetDest);
+
+        let range = sheetDest.getRangeByIndexes(0, 0, rowCount, columnCount);
+        range.values = values;
+        sheetDest.getUsedRange().format.autofitColumns();
+        sheetDest.getUsedRange().format.autofitRows();
+        let newTable = sheetDest.tables.add(range, true);
+
+        newTable.name = worksheetDest;
+        table.clearFilters();
+        sheetsCreated.push(worksheetDest)
     });
 }
 
 
+async function getValuesFromColumn(worksheetSource, tableSource, column) {
+    return new Office.Promise(async function (resolve) {
+        await Excel.run(async (context) => {
+            let sheet = context.workbook.worksheets.getItem(worksheetSource);
+            const table = sheet.tables.getItem(tableSource);
+            const columnRange = table.columns.getItem(column).getDataBodyRange().load("values");
+            await sheet.context.sync();
+            const columnValues = columnRange.values;
+            await context.sync();
+            resolve(columnValues);
+        });
+    });
+}
 
 async function createBoxplotFormulas(sheetName, tableName, colName) {
     await Office.onReady();
     await Excel.run(async (context) => {
-        console.log(sheetName + " " + tableName + " " + colName);
-
         let sheet = context.workbook.worksheets.getItem(sheetName);
         let table = sheet.tables.getItem(tableName);
         const columnRange = table.columns
@@ -104,7 +76,8 @@ async function createBoxplotFormulas(sheetName, tableName, colName) {
         let interquartileFormula = upperQuartile + "-QUARTILE(" + valueRange + "," + "1)";
         let stdDevFormula = "=STDEV.S(" + valueRange + ")";
 
-        let range = context.workbook.getActiveCell();
+        const tblrange = table.getRange();
+        let range = tblrange.getColumnsAfter(2).getCell(0, 1);
         range.load("address");
         await context.sync();
         let addrFirst = range.address;
@@ -133,142 +106,30 @@ async function createBoxplotFormulas(sheetName, tableName, colName) {
     });
 }
 
-async function setFormula() {
-    await Excel.run(async (context) => {
-        let sheet = context.workbook.worksheets.getItem("Tabelle1");
-        let table = sheet.tables.getItem("Tabelle1");
-        const columnRange = table.columns
-            .getItem("d")
-            .getDataBodyRange()
-            .load("values");
-        columnRange.load("address");
-        await context.sync();
-        let formula = "=STDEV.S(" + columnRange.address + ")";
-        let range = sheet.getRange("F3");
-        range.load("address");
-        await context.sync();
-        let addrFirst = range.address;
-        range.insert(Excel.InsertShiftDirection.right);
-        range.load("address");
-        await context.sync();
-        let addrLast = range.address;
-
-        let finalRange = sheet.getRange(addrFirst + ":" + addrLast);
-        finalRange.load("address");
-        await context.sync();
-        console.log(finalRange.address);
-        finalRange.formulas = [[formula, formula]];
-        finalRange.format.autofitColumns();
-
-        await context.sync();
-    });
-}
-
-async function stDev(sheetName, tableName, columnName){
-    await Office.onReady();
-    await Excel.run(async (context) => {
-        let sheet = context.workbook.worksheets.getItem(sheetName);
-        let table = sheet.tables.getItem(tableName);
-        const columnRange = table.columns.getItem(columnName).getDataBodyRange().load("values");
-        //await sheet.context.sync();
-
-        await context.sync();
-        
-        let merchantColumnValues = columnRange.values;
-        await context.sync();
-        //merchantColumnValues.load('value');
-        let unitSoldInNov = context.workbook.functions.dstDev(merchantColumnValues);
-        //await context.sync();
-        console.log(' Number of wrenches sold in November = ' + unitSoldInNov);
-    });
-}
-
-
-async function filterTable(worksheet, sourceTable, variable, value) {
-    const sheet = context.workbook.worksheets.getItem(worksheet);
-    const table = sheet.tables.getItem(sourceTable);
-    let filter = table.columns.getItem(variable).filter;
-    filter.apply({
-        filterOn: Excel.FilterOn.values,
-        values: [value]
-    });
-    await context.sync();
-}
-
-async function clearFilters(worksheet, sourceTable) {
-    await Excel.run(async (context) => {
-        const sheet = context.workbook.worksheets.getItem(worksheet);
-        const table = sheet.tables.getItem(sourceTable);
-        table.clearFilters();
-        await context.sync();
-    });
-}
-
-async function copyVisibleRange(worksheetSource, tableSource, worksheetDest) {
-    return new Office.Promise(async function (resolve) {
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getItem(worksheetSource);
-            const table = sheet.tables.getItem(tableSource);
-            const visibleRange = table.getRange().getVisibleView().load("values");
-            await context.sync();
-
-            let values = visibleRange.values;
-            let rowCount = values.length;
-            let columnCount = values[0].length;
-
-            context.workbook.worksheets.getItemOrNullObject(worksheetDest).delete();
-            let sheetDest = context.workbook.worksheets.add(worksheetDest);
-            let range = sheetDest.getRangeByIndexes(0, 0, rowCount, columnCount);
-            range.values = values;
-            sheetDest.getUsedRange().format.autofitColumns();
-            sheetDest.getUsedRange().format.autofitRows();
-
-            let newTable = sheetDest.tables.add(range, true);
-            newTable.name = worksheetDest;
-            await context.sync();
-        });
-    });
-}
-
-
-async function log(msg) {
-    console.log(msg);
-}
-
-
-//top!
-async function getValuesFromColumn(worksheetSource, tableSource, column) {
-    return new Office.Promise(async function (resolve) {
-        await Excel.run(async (context) => {
-            let sheet = context.workbook.worksheets.getItem(worksheetSource);
-            const table = sheet.tables.getItem(tableSource);
-            const columnRange = table.columns.getItem(column).getDataBodyRange().load("values");
-            await sheet.context.sync();
-            const columnValues = columnRange.values;
-            await context.sync();
-            resolve(columnValues);
-        });
-    });
-
-}
-
-async function deleteLastWorksheet() {
+async function deleteWorksheets(deleteAll) {
     await Office.onReady();
     await Excel.run(async (context) => {
         const sheets = context.workbook.worksheets;
         sheets.load("items/name");
         await context.sync();
         if (sheets.items.length > 1) {
-            const lastSheet = sheets.items[sheets.items.length - 1];
-            console.log(`Deleting worksheet named "${lastSheet.name}"`);
-            lastSheet.delete();
-            await context.sync();
-        } else {
-            console.log("Unable to delete the last worksheet in the workbook");    }
+            if (deleteAll){
+                for (let i in sheets.items) {
+                    if (sheetsCreated.includes(sheets.items[i].name)){
+                        const sheet = sheets.items[i];
+                        sheet.delete();                        
+                        await context.sync();                
+                    }
+                }
+            }else{
+                const lastSheet = sheets.items[sheets.items.length - 1];
+                lastSheet.delete();
+                await context.sync();                
+            }
+        }
     });
 }
 
-let dotNetReference;
 async function registerOnActivateHandler(callbackRef) {
     dotNetReference = callbackRef;
     await Office.onReady();
@@ -285,17 +146,15 @@ async function onActivate(args) {
     await Excel.run(async (context) => {
         console.log("The activated worksheet Id : " + args.worksheetId);
         await listWorksheets();
-    });
+    });     
 }
 
 async function listWorksheets() {
     await Office.onReady();
     await Excel.run(async (context) => {
         let sheet = context.workbook.worksheets.getActiveWorksheet();
-        //const sheets = context.workbook.worksheets;
         sheet.load("items/name");
         await context.sync();
-        //let allSheets = [];
         const tables = sheet.tables;
         tables.load('name, count, headers, columns');
         await context.sync();
@@ -308,7 +167,7 @@ async function listWorksheets() {
             }
             allTables.push({tablename: tables.items[j].name, categories: alltableheaders});
         }
-        console.log(sheet.name);
         await dotNetReference.invokeMethodAsync("CallbackAllTablesInActiveWorksheet", allTables, sheet.name);
     });
 }
+
