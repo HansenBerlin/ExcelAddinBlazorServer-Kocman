@@ -1,0 +1,168 @@
+﻿@page "/"
+@using Microsoft.Fast.Components.FluentUI
+@using System.Text.Json
+@inject IJSRuntime _jsRuntimeService;
+
+<div>@SelectedTable</div>
+<div>@SelectedVariable</div>
+
+
+<div style="display: flex; flex-direction: column; margin-top: 12px;width: 280px">
+    <label for="people-listbox">Chose table</label>
+    <FluentSelect TOption="string"
+                  Items="@tables"
+                  Id="people-listbox"
+                  OptionValue="@(p => p.ToString())"
+                  OptionText="@(p => p.ToString())"
+                  @bind-Value="@SelectedTable" />
+</div>
+
+<div style="display: flex; flex-direction: column; margin-top: 12px; width: 280px">
+    
+    <label for="people-listbox">Chose category</label>
+        <FluentSelect TOption="string"
+                      Items="@categories"
+                      Id="people"
+                      OptionValue="@(p => p.ToString())"
+                      OptionText="@(p => p.ToString())"
+                      @bind-Value="@SelectedVariable" />
+</div>
+
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Write()">CREATE</FluentButton>
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Delete()">DELETE</FluentButton>
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Reset()">RESET</FluentButton>
+<FluentButton Appearance="Appearance.Outline" style="width: 280px;" @onclick="async () => await Calc()">STD</FluentButton>
+
+@code{
+    
+    private string? SelectedTable { get; set; } = "";
+    private string? SelectedVariable { get; set; } = "";
+    private string SelectedSheet => GetSheet();
+
+    readonly List<string> categories = new();
+    readonly List<string> tables = new();
+    
+    //readonly List<Option<string>> _categories = new();
+    //readonly List<Option<string>> _tables = new();
+    private List<WorksheetModel> Worksheets { get; set; } = new();
+    private JsonSerializerOptions _options;
+    private DotNetObjectReference<Index> _lDotNetReference;
+    
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            _lDotNetReference = DotNetObjectReference.Create(this);
+            await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+            StateHasChanged();
+        }
+    }
+    
+    private async Task Write()
+    {
+        var sheet = GetSheet();
+        var json = await _jsRuntimeService.InvokeAsync<JsonElement>("getValuesFromColumn", sheet, SelectedTable, SelectedVariable);
+
+        var tbl = json.Deserialize<object[][]>(_options);
+        
+        List<string> distinctValues = new();
+        (tbl ?? Array.Empty<object[]>()).ToList().ForEach(e =>
+        {
+            if (distinctValues.Contains(e[0].ToString()) == false)
+                distinctValues.Add(e[0].ToString());
+        });
+        await _jsRuntimeService.InvokeVoidAsync("add", sheet, SelectedTable, SelectedVariable, distinctValues);
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+    }
+    
+    private async Task Delete()
+    {
+        await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+    }
+    
+    private async Task Calc()
+    {
+        await _jsRuntimeService.InvokeVoidAsync("stDev", SelectedSheet, SelectedTable, SelectedVariable);
+    }
+    
+    private async Task Reset()
+    {
+        for (int i = 0; i < Worksheets.Count - 1; i++)
+        {
+            await _jsRuntimeService.InvokeVoidAsync("deleteLastWorksheet");
+        }
+        await _jsRuntimeService.InvokeVoidAsync("listWorksheets", _lDotNetReference);
+    }
+
+    [JSInvokable]
+    public void CallbackAllWorksheets(JsonElement worksheetsArray)
+    {
+        var tables = worksheetsArray.Deserialize<WorksheetModel[]>(_options);
+        Worksheets.Clear();
+        Worksheets.AddRange(tables);
+        UpdateTablesCollection();
+        UpdateCategoriesCollection();
+    }
+
+    void UpdateCategoriesCollection()
+    {
+        categories.Clear();
+        foreach (var worksheet in Worksheets)
+        {
+            foreach (var table in worksheet.Tables)
+            {
+                if (table.TableName != SelectedTable) continue;
+                for (int i = 0; i < table.Categories.Length; i++)
+                {
+                    bool state = i == 0;
+                    if (state)
+                    {
+                        SelectedVariable = table.Categories[i];
+                    }
+                    
+                    categories.Add(table.Categories[i]);
+                }
+            }
+        }
+    }
+    
+    void UpdateTablesCollection()
+    {
+        tables.Clear();
+        foreach (var worksheet in Worksheets)
+        {
+            for (int i = 0; i < worksheet.Tables.Length; i++)
+            {
+                bool state = i == 0;
+                if (state)
+                {
+                    SelectedTable = worksheet.Tables[i].TableName;
+                }
+                
+                tables.Add(worksheet.Tables[i].TableName);
+            }
+        }
+    }
+    
+    string GetSheet()
+    {
+        foreach (var tab in tables)
+        {
+            foreach (var sheet in Worksheets)
+            {
+                foreach (var t in sheet.Tables)
+                {
+                    if (t.TableName == tab)
+                        return sheet.SheetName;
+                }
+            }
+        }
+        return "no sheet found";
+    }
+}

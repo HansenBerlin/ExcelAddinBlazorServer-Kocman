@@ -1,0 +1,37 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\Hannes\\source\\repos\\ExcelAddinBlazorServer\\ExcelAddinBlazorServer\\wwwroot\\css\\site.css",
+      "PackagePath": "staticwebassets\\css\\site.css"
+    },
+    {
+      "Id": "C:\\Users\\Hannes\\source\\repos\\ExcelAddinBlazorServer\\ExcelAddinBlazorServer\\wwwroot\\favicon.ico",
+      "PackagePath": "staticwebassets\\favicon.ico"
+    },
+    {
+      "Id": "C:\\Users\\Hannes\\source\\repos\\ExcelAddinBlazorServer\\ExcelAddinBlazorServer\\wwwroot\\js\\index.js",
+      "PackagePath": "staticwebassets\\js\\index.js"
+    },
+    {
+      "Id": "C:\\Users\\Hannes\\source\\repos\\ExcelAddinBlazorServer\\ExcelAddinBlazorServer\\wwwroot\\manifest.xml",
+      "PackagePath": "staticwebassets\\manifest.xml"
+    },
+    {
+      "Id": "obj\\Debug\\net6.0\\staticwebassets\\msbuild.ExcelAddinBlazorServer.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net6.0\\staticwebassets\\msbuild.build.ExcelAddinBlazorServer.props",
+      "PackagePath": "build\\ExcelAddinBlazorServer.props"
+    },
+    {
+      "Id": "obj\\Debug\\net6.0\\staticwebassets\\msbuild.buildMultiTargeting.ExcelAddinBlazorServer.props",
+      "PackagePath": "buildMultiTargeting\\ExcelAddinBlazorServer.props"
+    },
+    {
+      "Id": "obj\\Debug\\net6.0\\staticwebassets\\msbuild.buildTransitive.ExcelAddinBlazorServer.props",
+      "PackagePath": "buildTransitive\\ExcelAddinBlazorServer.props"
+    }
+  ],
+  "ElementsToRemove": []
+}
