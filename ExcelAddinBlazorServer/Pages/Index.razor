@@ -99,8 +99,16 @@
             .Select(val => Task.Run(async () => await _jsRuntimeService
                 .InvokeVoidAsync("createWorksheets", ActiveSheet, SelectedTable, SelectedVariable, val)))
             .ToList();
-        await Task.WhenAll(tasks);
-        await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
+        try
+        {
+            await Task.WhenAll(tasks);
+            await _jsRuntimeService.InvokeVoidAsync("getTablesFromActiveWorksheet");
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
     }
     
     private async Task Delete()

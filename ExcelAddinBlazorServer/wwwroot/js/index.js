@@ -149,7 +149,7 @@ async function onActivate(args) {
     });     
 }
 
-async function listWorksheets() {
+async function getTablesFromActiveWorksheet() {
     await Office.onReady();
     await Excel.run(async (context) => {
         let sheet = context.workbook.worksheets.getActiveWorksheet();
